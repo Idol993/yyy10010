@@ -111,7 +111,7 @@ fn initialize_state(@builtin(global_invocation_id) gid: vec3<u32>) {
     
     var terrain_h: f32 = params.h0 * 0.12 * exp(-dist * dist * 8.0);
     terrain_h += params.h0 * 0.04 * (sin(xf * 12.566) * 0.5 + 0.5) * exp(-abs(yf - 0.7) * 5.0);
-    terrain_h += params.h0 * 0.03 * sin(xf * 25.0 + yf * 18.0) * 0.5 + 0.5;
+    terrain_h += params.h0 * 0.03 * (sin(xf * 25.0 + yf * 18.0) * 0.5 + 0.5);
     
     terrain_buf[i] = terrain_h;
     obstacle_buf[i] = select(0.0, 1.0, terrain_h > params.h0 * 0.5);
@@ -308,7 +308,7 @@ fn compute_height_and_normals(@builtin(global_invocation_id) gid: vec3<u32>) {
     let yl: u32 = select(y - 1u, 0u, y > 0u);
     let yu: u32 = select(y + 1u, GRID_SIZE - 1u, y < GRID_SIZE - 1u);
     
-    let hxl: f32 = height_buf[yl * GRID_SIZE + xl];
+    let hxl: f32 = height_buf[y * GRID_SIZE + xl];
     let hxr: f32 = height_buf[y * GRID_SIZE + xr];
     let hyl: f32 = height_buf[yl * GRID_SIZE + x];
     let hyu: f32 = height_buf[yu * GRID_SIZE + x];

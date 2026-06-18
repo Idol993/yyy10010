@@ -1,10 +1,11 @@
 import { waterRendererWgsl } from './shaders/water-renderer.wgsl.js';
 
 export class WaterRenderer {
-    constructor(device, context, simulator) {
+    constructor(device, gpuContext, simulator) {
         this.device = device;
-        this.context = context;
+        this.gpuContext = gpuContext;
         this.simulator = simulator;
+        this.canvas = gpuContext.canvas;
         this.renderSize = 256;
 
         this.renderParams = {
@@ -37,110 +38,133 @@ export class WaterRenderer {
 
     async init() {
         this._createBuffers();
+        this._createShaderModule();
         this._createPipelines();
         this._createBindGroups();
-        this._updateCamera();
         return this;
     }
 
     _createBuffers() {
         const device = this.device;
-        const camSize = 4 * 16 + 4 * 16 + 16 + 16 + 8 + 8;
+
         this.buffers.camera = device.createBuffer({
-            size: camSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            size: 256,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         this.buffers.render = device.createBuffer({
-            size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            size: 256,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         this.buffers.light = device.createBuffer({
-            size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            size: 256,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+    }
+
+    _createShaderModule() {
+        this.shaderModule = this.device.createShaderModule({
+            code: waterRendererWgsl,
+            label: 'RenderShader'
         });
     }
 
     _createPipelines() {
         const device = this.device;
-        const module = device.createShaderModule({ code: waterRendererWgsl, label: 'RenderShader' });
+        const module = this.shaderModule;
+        const targetFmt = navigator.gpu.getPreferredCanvasFormat();
 
-        const bgl0 = device.createBindGroupLayout({
-            entries: [
-                { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-                { binding: 1, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-                { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }
-            ]
-        });
-
-        const simBuffers = this.simulator.getBuffersForRender();
-        const bgl1 = device.createBindGroupLayout({
-            entries: [
-                { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-                { binding: 1, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-                { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-                { binding: 3, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
-            ]
-        });
-
-        const pipelineLayout = device.createPipelineLayout({
-            bindGroupLayouts: [bgl0, bgl1]
-        });
+        const depthStencilState = {
+            format: 'depth24plus',
+            depthWriteEnabled: true,
+            depthCompare: 'less'
+        };
+        const multiSampleState = { count: 4 };
+        const primitiveState = { topology: 'triangle-list', cullMode: 'none' };
 
         this.pipelines.water = device.createRenderPipeline({
-            layout: pipelineLayout,
+            layout: 'auto',
             vertex: { module, entryPoint: 'vs_water' },
             fragment: {
                 module, entryPoint: 'fs_water',
-                targets: [{ format: this.context.getPreferredFormat ? this.context.getPreferredFormat() : navigator.gpu.getPreferredCanvasFormat() }]
+                targets: [{ format: targetFmt }]
             },
-            primitive: { topology: 'triangle-list', cullMode: 'none' },
-            depthStencil: {
-                format: 'depth24plus',
-                depthWriteEnabled: true,
-                depthCompare: 'less'
-            },
-            multisample: { count: 4 }
+            primitive: primitiveState,
+            depthStencil: depthStencilState,
+            multisample: multiSampleState,
+            label: 'WaterPipeline'
         });
 
         this.pipelines.skybox = device.createRenderPipeline({
-            layout: pipelineLayout,
+            layout: 'auto',
             vertex: { module, entryPoint: 'vs_skybox' },
             fragment: {
                 module, entryPoint: 'fs_skybox',
-                targets: [{ format: this.context.getPreferredFormat ? this.context.getPreferredFormat() : navigator.gpu.getPreferredCanvasFormat() }]
+                targets: [{ format: targetFmt }]
             },
-            primitive: { topology: 'triangle-list', cullMode: 'none' },
+            primitive: primitiveState,
             depthStencil: {
                 format: 'depth24plus',
                 depthWriteEnabled: false,
                 depthCompare: 'less-equal'
             },
-            multisample: { count: 4 }
+            multisample: multiSampleState,
+            label: 'SkyboxPipeline'
         });
-
-        this._bgl0 = bgl0;
-        this._bgl1 = bgl1;
     }
 
     _createBindGroups() {
         const device = this.device;
         const simBufs = this.simulator.getBuffersForRender();
 
-        this.bindGroups.uniforms = device.createBindGroup({
-            layout: this._bgl0,
+        this.bindGroups.waterUniforms = device.createBindGroup({
+            layout: this.pipelines.water.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.buffers.camera } },
                 { binding: 1, resource: { buffer: this.buffers.render } },
                 { binding: 2, resource: { buffer: this.buffers.light } }
-            ]
+            ],
+            label: 'WaterUniformBG'
         });
 
-        this.bindGroups.simData = device.createBindGroup({
-            layout: this._bgl1,
+        this.bindGroups.waterSim = device.createBindGroup({
+            layout: this.pipelines.water.getBindGroupLayout(1),
             entries: [
                 { binding: 0, resource: { buffer: simBufs.height } },
                 { binding: 1, resource: { buffer: simBufs.normal } },
                 { binding: 2, resource: { buffer: simBufs.terrain } },
                 { binding: 3, resource: { buffer: simBufs.obstacle } }
-            ]
+            ],
+            label: 'WaterSimBG'
         });
+
+        this.bindGroups.skyboxUniforms = device.createBindGroup({
+            layout: this.pipelines.skybox.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: this.buffers.camera } },
+                { binding: 1, resource: { buffer: this.buffers.render } },
+                { binding: 2, resource: { buffer: this.buffers.light } }
+            ],
+            label: 'SkyboxUniformBG'
+        });
+
+        const skyboxBGL1 = this.pipelines.skybox.getBindGroupLayout(1);
+        if (skyboxBGL1) {
+            const skyboxEntries = [];
+            const skyInfo = skyboxBGL1.entries || [];
+            for (const e of skyInfo) {
+                if (e.binding === 0) skyboxEntries.push({ binding: 0, resource: { buffer: simBufs.height } });
+                if (e.binding === 1) skyboxEntries.push({ binding: 1, resource: { buffer: simBufs.normal } });
+                if (e.binding === 2) skyboxEntries.push({ binding: 2, resource: { buffer: simBufs.terrain } });
+                if (e.binding === 3) skyboxEntries.push({ binding: 3, resource: { buffer: simBufs.obstacle } });
+            }
+            if (skyboxEntries.length > 0) {
+                this.bindGroups.skyboxSim = device.createBindGroup({
+                    layout: skyboxBGL1,
+                    entries: skyboxEntries,
+                    label: 'SkyboxSimBG'
+                });
+            }
+        }
     }
 
     _ensureRenderTextures(width, height) {
@@ -175,36 +199,43 @@ export class WaterRenderer {
         const viewProj = this._mat4Mul(proj, view);
         const invViewProj = this._mat4Inverse(viewProj);
 
-        const data = new Float32Array(4 * 16 + 4 * 16 + 4 + 4 + 2 + 2);
-        let o = 0;
-        data.set(viewProj, o); o += 16;
-        data.set(invViewProj, o); o += 16;
-        data.set([cx, cy, cz, 1.0], o); o += 4;
+        const data = new Float32Array(64);
+        data.set(viewProj, 0);
+        data.set(invViewProj, 16);
+        data.set([cx, cy, cz, 1.0], 32);
         const dir = this._normalize([target[0] - cx, target[1] - cy, target[2] - cz]);
-        data.set([dir[0], dir[1], dir[2], 0.0], o); o += 4;
-        data.set([this.camera.near, this.camera.far], o);
+        data.set([dir[0], dir[1], dir[2], 0.0], 36);
+        data.set([this.camera.near, this.camera.far, 0, 0], 40);
         this.device.queue.writeBuffer(this.buffers.camera, 0, data);
     }
 
     _updateRender() {
         const ws = this.simulator.worldSize;
         const data = new Float32Array([
-            ws, ws, this.renderParams.heightAmplify, this.renderParams.time,
+            ws, ws, 0, 0,
+            this.renderParams.heightAmplify, this.renderParams.time,
             this.renderParams.fresnelPower, this.renderParams.refractStrength,
-            this.renderParams.showWireframe, 0
+            this.renderParams.showWireframe, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0
         ]);
         this.device.queue.writeBuffer(this.buffers.render, 0, data);
     }
 
     _updateLight() {
         const dir = this._normalize(this.light.sunDir);
-        const data = new Float32Array([
-            dir[0], dir[1], dir[2], 0,
-            ...this.light.sunColor,
-            ...this.light.ambientColor,
-            ...this.light.waterColor,
-            ...this.light.deepColor
-        ]);
+        const data = new Float32Array(64);
+        data.set([dir[0], dir[1], dir[2], 0], 0);
+        data.set(this.light.sunColor, 4);
+        data.set(this.light.ambientColor, 8);
+        data.set(this.light.waterColor, 12);
+        data.set(this.light.deepColor, 16);
         this.device.queue.writeBuffer(this.buffers.light, 0, data);
     }
 
@@ -217,9 +248,9 @@ export class WaterRenderer {
         this.camera.distance = Math.max(10, Math.min(200, this.camera.distance * (1 + delta * 0.001)));
     }
 
-    render(canvasTexture) {
-        const w = this.context.canvas.width;
-        const h = this.context.canvas.height;
+    render(canvasView) {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
         this._ensureRenderTextures(w, h);
 
         this._updateCamera();
@@ -230,24 +261,27 @@ export class WaterRenderer {
         const pass = encoder.beginRenderPass({
             colorAttachments: [{
                 view: this.msaaTexture.createView(),
-                resolveTarget: canvasTexture,
+                resolveTarget: canvasView,
                 clearValue: { r: 0.05, g: 0.08, b: 0.15, a: 1.0 },
                 loadOp: 'clear', storeOp: 'store'
             }],
             depthStencilAttachment: {
                 view: this.depthTexture.createView(),
                 depthClearValue: 1.0, depthLoadOp: 'clear', depthStoreOp: 'store'
-            }
+            },
+            label: 'MainPass'
         });
 
         pass.setPipeline(this.pipelines.skybox);
-        pass.setBindGroup(0, this.bindGroups.uniforms);
-        pass.setBindGroup(1, this.bindGroups.simData);
+        pass.setBindGroup(0, this.bindGroups.skyboxUniforms);
+        if (this.bindGroups.skyboxSim) {
+            pass.setBindGroup(1, this.bindGroups.skyboxSim);
+        }
         pass.draw(3);
 
         pass.setPipeline(this.pipelines.water);
-        pass.setBindGroup(0, this.bindGroups.uniforms);
-        pass.setBindGroup(1, this.bindGroups.simData);
+        pass.setBindGroup(0, this.bindGroups.waterUniforms);
+        pass.setBindGroup(1, this.bindGroups.waterSim);
         const faceCount = (this.renderSize - 1) * (this.renderSize - 1);
         pass.draw(faceCount * 6);
 
