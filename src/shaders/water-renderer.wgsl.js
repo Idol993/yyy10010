@@ -139,9 +139,17 @@ fn vs_water(@builtin(vertex_index) vid: u32) -> VSOut {
     let worldZ: f32 = (v - 0.5) * render.worldSize.y;
     let worldPos: vec3<f32> = vec3<f32>(worldX, amplifiedH, worldZ);
     
-    let grad: vec2<f32> = sample_normal(uv);
-    let nx: f32 = -grad.x * render.heightAmplify;
-    let nz: f32 = -grad.y * render.heightAmplify;
+    let gradTotal: vec2<f32> = sample_normal(uv);
+    let terrainGrad: vec2<f32> = vec2<f32>(
+        (sample_terrain(uv + vec2<f32>(1.0 / SIM_SIZE_F, 0.0)) - sample_terrain(uv - vec2<f32>(1.0 / SIM_SIZE_F, 0.0))) * 0.5 * SIM_SIZE_F,
+        (sample_terrain(uv + vec2<f32>(0.0, 1.0 / SIM_SIZE_F)) - sample_terrain(uv - vec2<f32>(0.0, 1.0 / SIM_SIZE_F))) * 0.5 * SIM_SIZE_F
+    );
+    let waterGrad: vec2<f32> = gradTotal - terrainGrad;
+    let amplifiedGrad: vec2<f32> = terrainGrad + waterGrad * render.heightAmplify;
+    let worldGrad: vec2<f32> = amplifiedGrad / render.worldSize;
+    
+    let nx: f32 = -worldGrad.x;
+    let nz: f32 = -worldGrad.y;
     let N: vec3<f32> = normalize(vec3<f32>(nx, 1.0, nz));
     
     var out: VSOut;
@@ -226,8 +234,8 @@ fn fs_water(input: VSOut) -> @location(0) vec4<f32> {
     
     var final_color: vec3<f32> = color + specColor + diffColor + ambient;
     
-    let grad: vec2<f32> = sample_normal(input.uv);
-    let foam: f32 = smoothstep(1.5, 3.0, abs(grad.x + grad.y) * render.heightAmplify);
+    let slope: f32 = length(input.normal.xz) / max(input.normal.y, 0.001);
+    let foam: f32 = smoothstep(0.5, 1.5, slope);
     final_color = mix(final_color, vec3<f32>(0.95, 0.97, 1.0), foam * 0.4);
     
     if render.showWireframe > 0.5 {

@@ -303,10 +303,10 @@ fn compute_height_and_normals(@builtin(global_invocation_id) gid: vec3<u32>) {
     
     height_buf[i] = water_h + terr;
     
-    let xl: u32 = select(x - 1u, 0u, x > 0u);
-    let xr: u32 = select(x + 1u, GRID_SIZE - 1u, x < GRID_SIZE - 1u);
-    let yl: u32 = select(y - 1u, 0u, y > 0u);
-    let yu: u32 = select(y + 1u, GRID_SIZE - 1u, y < GRID_SIZE - 1u);
+    let xl: u32 = max(x - 1u, 0u);
+    let xr: u32 = min(x + 1u, GRID_SIZE - 1u);
+    let yl: u32 = max(y - 1u, 0u);
+    let yu: u32 = min(y + 1u, GRID_SIZE - 1u);
     
     let hxl: f32 = height_buf[y * GRID_SIZE + xl];
     let hxr: f32 = height_buf[y * GRID_SIZE + xr];
@@ -351,8 +351,11 @@ fn apply_interaction(@builtin(global_invocation_id) gid: vec3<u32>) {
         case 1u: {
             let new_terr: f32 = clamp(terrain_buf[i] + strength * 0.1, 0.0, params.h0 * 0.9);
             terrain_buf[i] = new_terr;
-            obstacle_buf[i] = select(0.0, 1.0, new_terr > params.h0 * 0.55);
-            h_buf[i] = max(params.h0 - new_terr, 0.05);
+            h_buf[i] = max(params.h0 - new_terr, 0.01);
+            if h_buf[i] < 0.02 {
+                hu_buf[i] = 0.0;
+                hv_buf[i] = 0.0;
+            }
         }
         case 2u: {
             terrain_buf[i] = params.h0 * 0.8 * falloff + terrain_buf[i] * (1.0 - falloff);

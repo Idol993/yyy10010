@@ -211,20 +211,16 @@ export class WaterRenderer {
 
     _updateRender() {
         const ws = this.simulator.worldSize;
-        const data = new Float32Array([
-            ws, ws, 0, 0,
-            this.renderParams.heightAmplify, this.renderParams.time,
-            this.renderParams.fresnelPower, this.renderParams.refractStrength,
-            this.renderParams.showWireframe, 0, 0, 0,
-            0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0
-        ]);
+        const data = new Float32Array(64);
+        data[0] = ws;
+        data[1] = ws;
+        data[2] = this.renderParams.heightAmplify;
+        data[3] = this.renderParams.time;
+        data[4] = this.renderParams.fresnelPower;
+        data[5] = this.renderParams.refractStrength;
+        data[6] = this.renderParams.showWireframe;
+        data[7] = 0;
+        data[8] = 0;
         this.device.queue.writeBuffer(this.buffers.render, 0, data);
     }
 
