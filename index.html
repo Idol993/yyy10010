@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D浅水方程流体模拟器 - MacCormack方法</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <canvas id="gpu-canvas"></canvas>
+        
+        <div id="ui-panel">
+            <h2>流体模拟控制台</h2>
+            
+            <div class="section">
+                <h3>模拟参数</h3>
+                <div class="control">
+                    <label>重力加速度 g: <span id="gravity-value">9.81</span></label>
+                    <input type="range" id="gravity" min="0.1" max="30" step="0.1" value="9.81">
+                </div>
+                <div class="control">
+                    <label>水深 h0: <span id="h0-value">1.0</span></label>
+                    <input type="range" id="h0" min="0.1" max="5" step="0.05" value="1.0">
+                </div>
+                <div class="control">
+                    <label>粘度系数: <span id="viscosity-value">0.002</span></label>
+                    <input type="range" id="viscosity" min="0" max="0.05" step="0.0005" value="0.002">
+                </div>
+                <div class="control">
+                    <label>CFL数: <span id="cfl-value">0.4</span></label>
+                    <input type="range" id="cfl" min="0.05" max="0.9" step="0.01" value="0.4">
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>显示设置</h3>
+                <div class="control">
+                    <label>波高放大: <span id="amplify-value">3.0</span></label>
+                    <input type="range" id="amplify" min="0.1" max="10" step="0.1" value="3.0">
+                </div>
+                <div class="control">
+                    <label>菲涅尔强度: <span id="fresnel-value">1.5</span></label>
+                    <input type="range" id="fresnel" min="0.1" max="5" step="0.05" value="1.5">
+                </div>
+                <div class="control">
+                    <label>折射强度: <span id="refract-value">0.7</span></label>
+                    <input type="range" id="refract" min="0" max="1" step="0.01" value="0.7">
+                </div>
+                <div class="checkbox-control">
+                    <input type="checkbox" id="show-wireframe">
+                    <label for="show-wireframe">显示线框</label>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>交互模式</h3>
+                <div class="radio-group">
+                    <label><input type="radio" name="mode" value="wave" checked> 生成波浪</label>
+                    <label><input type="radio" name="mode" value="terrain"> 拖拽地形</label>
+                    <label><input type="radio" name="mode" value="obstacle"> 放置障碍物</label>
+                </div>
+                <div class="control">
+                    <label>画笔大小: <span id="brush-size-value">30</span></label>
+                    <input type="range" id="brush-size" min="5" max="100" step="1" value="30">
+                </div>
+                <div class="control">
+                    <label>画笔强度: <span id="brush-strength-value">0.5</span></label>
+                    <input type="range" id="brush-strength" min="0.01" max="2" step="0.01" value="0.5">
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>控制</h3>
+                <div class="button-row">
+                    <button id="btn-pause">暂停</button>
+                    <button id="btn-reset">重置</button>
+                    <button id="btn-splash">测试水波</button>
+                </div>
+            </div>
+            
+            <div class="section stats">
+                <h3>性能统计</h3>
+                <div>FPS: <span id="fps">0</span></div>
+                <div>帧时间: <span id="frame-time">0</span> ms</div>
+                <div>计算步: <span id="compute-time">0</span> ms</div>
+                <div>渲染步: <span id="render-time">0</span> ms</div>
+                <div>内存池使用: <span id="mem-usage">0</span> / <span id="mem-total">0</span> MB</div>
+            </div>
+            
+            <div class="info">
+                <p>MacCormack方法 + 1024×1024网格</p>
+                <p>鼠标拖拽生成波浪/修改地形</p>
+            </div>
+        </div>
+        
+        <div id="loading-overlay">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <h2>初始化WebGPU流体模拟器...</h2>
+                <p id="loading-status">正在检查WebGPU支持...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

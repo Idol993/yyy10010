@@ -1,0 +1,23 @@
+{
+  "name": "webgpu-shallow-water-simulator",
+  "version": "1.0.0",
+  "description": "3D不可压缩流体动力学模拟器 - 基于MacCormack方法的浅水方程求解器 (WebGPU)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "serve": "python -m http.server 8080"
+  },
+  "keywords": [
+    "webgpu",
+    "fluid-simulation",
+    "shallow-water-equations",
+    "maccormack",
+    "gpu-computing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
