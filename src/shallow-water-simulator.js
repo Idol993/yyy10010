@@ -70,7 +70,7 @@ export class ShallowWaterSimulator {
 
         const entries = ['initialize_state', 'apply_boundary_conditions',
             'maccormack_predictor', 'maccormack_corrector',
-            'compute_height_and_normals', 'apply_interaction'];
+            'compute_height_only', 'compute_normals', 'apply_interaction'];
 
         for (const entry of entries) {
             this.pipelines[entry] = device.createComputePipeline({
@@ -194,9 +194,11 @@ export class ShallowWaterSimulator {
 
         const enc2 = this.device.createCommandEncoder();
         const p2 = enc2.beginComputePass();
-        p2.setPipeline(this.pipelines.compute_height_and_normals);
         p2.setBindGroup(0, this.bindGroups.params);
         p2.setBindGroup(1, this.bindGroups.state);
+        p2.setPipeline(this.pipelines.compute_height_only);
+        p2.dispatchWorkgroups(wg, wg);
+        p2.setPipeline(this.pipelines.compute_normals);
         p2.dispatchWorkgroups(wg, wg);
         p2.end();
         this.device.queue.submit([enc2.finish()]);

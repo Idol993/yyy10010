@@ -292,7 +292,7 @@ fn maccormack_corrector(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 @compute @workgroup_size(16, 16)
-fn compute_height_and_normals(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn compute_height_only(@builtin(global_invocation_id) gid: vec3<u32>) {
     let x: u32 = gid.x;
     let y: u32 = gid.y;
     if x >= GRID_SIZE || y >= GRID_SIZE { return; }
@@ -302,23 +302,31 @@ fn compute_height_and_normals(@builtin(global_invocation_id) gid: vec3<u32>) {
     let water_h: f32 = h_buf[i];
     
     height_buf[i] = water_h + terr;
+}
+
+@compute @workgroup_size(16, 16)
+fn compute_normals(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let x: u32 = gid.x;
+    let y: u32 = gid.y;
+    if x >= GRID_SIZE || y >= GRID_SIZE { return; }
     
+    let i: u32 = idx(x, y);
     let hc: f32 = height_buf[i];
     
     var dhdx: f32;
-    if x == 0u {
-        dhdx = (height_buf[y * GRID_SIZE + 1u] - hc) * GRID_SIZE_F;
-    } else if x == GRID_SIZE - 1u {
-        dhdx = (hc - height_buf[y * GRID_SIZE + (GRID_SIZE - 2u)]) * GRID_SIZE_F;
+    if x < HALO {
+        dhdx = (height_buf[y * GRID_SIZE + (x + 1u)] - hc) * GRID_SIZE_F;
+    } else if x >= GRID_SIZE - HALO {
+        dhdx = (hc - height_buf[y * GRID_SIZE + (x - 1u)]) * GRID_SIZE_F;
     } else {
         dhdx = (height_buf[y * GRID_SIZE + (x + 1u)] - height_buf[y * GRID_SIZE + (x - 1u)]) * 0.5 * GRID_SIZE_F;
     }
     
     var dhdy: f32;
-    if y == 0u {
-        dhdy = (height_buf[1u * GRID_SIZE + x] - hc) * GRID_SIZE_F;
-    } else if y == GRID_SIZE - 1u {
-        dhdy = (hc - height_buf[(GRID_SIZE - 2u) * GRID_SIZE + x]) * GRID_SIZE_F;
+    if y < HALO {
+        dhdy = (height_buf[(y + 1u) * GRID_SIZE + x] - hc) * GRID_SIZE_F;
+    } else if y >= GRID_SIZE - HALO {
+        dhdy = (hc - height_buf[(y - 1u) * GRID_SIZE + x]) * GRID_SIZE_F;
     } else {
         dhdy = (height_buf[(y + 1u) * GRID_SIZE + x] - height_buf[(y - 1u) * GRID_SIZE + x]) * 0.5 * GRID_SIZE_F;
     }
@@ -358,15 +366,25 @@ fn apply_interaction(@builtin(global_invocation_id) gid: vec3<u32>) {
         case 1u: {
             let dir: f32 = interaction.direction;
             let delta_terr: f32 = dir * strength * 0.1;
-            let new_terr: f32 = clamp(terrain_buf[i] + delta_terr, 0.0, params.h0 * 0.9);
-            terrain_buf[i] = new_terr;
-            h_buf[i] = max(params.h0 - new_terr, 0.01);
+            let actual_delta: f32;
+            let new_terr: f32 = terrain_buf[i] + delta_terr;
+            if new_terr < 0.0 {
+                actual_delta = -terrain_buf[i];
+                terrain_buf[i] = 0.0;
+            } else if new_terr > params.h0 * 0.9 {
+                actual_delta = params.h0 * 0.9 - terrain_buf[i];
+                terrain_buf[i] = params.h0 * 0.9;
+            } else {
+                actual_delta = delta_terr;
+                terrain_buf[i] = new_terr;
+            }
+            h_buf[i] = max(h_buf[i] - actual_delta, 0.01);
             if h_buf[i] < 0.02 {
                 hu_buf[i] = 0.0;
                 hv_buf[i] = 0.0;
             } else {
-                hu_buf[i] -= delta_terr * 5.0;
-                hv_buf[i] -= delta_terr * 5.0;
+                hu_buf[i] -= actual_delta * 5.0;
+                hv_buf[i] -= actual_delta * 5.0;
             }
         }
         case 2u: {
