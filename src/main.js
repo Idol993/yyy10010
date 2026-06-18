@@ -118,8 +118,17 @@ class FluidSimulationApp {
             this.renderer.setRenderParam('showWireframe', e.target.checked ? 1 : 0);
         });
 
+        const modeHints = {
+            wave: '左键生成波浪',
+            terrain: '左键抬高地形 · Shift+左键压低地形',
+            obstacle: '左键放置障碍物'
+        };
         document.querySelectorAll('input[name="mode"]').forEach(r => {
-            r.addEventListener('change', (e) => this.input.setMode(e.target.value));
+            r.addEventListener('change', (e) => {
+                this.input.setMode(e.target.value);
+                const hint = document.getElementById('mode-hint');
+                if (hint) hint.textContent = modeHints[e.target.value] || '';
+            });
         });
 
         bind('brush-size', 'brush-size-value', v => this.input.setBrushSize(v));

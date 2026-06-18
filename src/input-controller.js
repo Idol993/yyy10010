@@ -13,6 +13,7 @@ export class InputController {
         this.isRightDragging = false;
         this.mouseX = 0;
         this.mouseY = 0;
+        this.shiftHeld = false;
         
         this._bindEvents();
     }
@@ -25,6 +26,9 @@ export class InputController {
         this.canvas.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
         
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        window.addEventListener('keydown', (e) => { if (e.key === 'Shift') this.shiftHeld = true; });
+        window.addEventListener('keyup', (e) => { if (e.key === 'Shift') this.shiftHeld = false; });
         
         this.canvas.addEventListener('touchstart', (e) => this._onTouchStart(e), { passive: false });
         this.canvas.addEventListener('touchmove', (e) => this._onTouchMove(e), { passive: false });
@@ -145,13 +149,19 @@ export class InputController {
         else if (this.mode === 'terrain') mode = 1;
         else if (this.mode === 'obstacle') mode = 2;
         
+        let direction = 1.0;
+        if (this.mode === 'terrain' && this.shiftHeld) {
+            direction = -1.0;
+        }
+        
         this.simulator.setInteraction(
             Math.max(0.01, Math.min(0.99, normX)),
             Math.max(0.01, Math.min(0.99, normY)),
             radius,
             strength,
             mode,
-            active
+            active,
+            direction
         );
     }
 

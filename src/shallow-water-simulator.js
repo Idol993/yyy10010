@@ -20,7 +20,7 @@ export class ShallowWaterSimulator {
 
         this.interaction = {
             posX: 0.5, posY: 0.5, radius: 0.03, strength: 0.5,
-            mode: 0, active: 0
+            mode: 0, active: 0, direction: 1.0
         };
 
         this.buffers = {};
@@ -145,16 +145,18 @@ export class ShallowWaterSimulator {
         dv.setFloat32(12, this.interaction.strength, true);
         dv.setUint32(16, this.interaction.mode, true);
         dv.setUint32(20, this.interaction.active, true);
+        dv.setFloat32(24, this.interaction.direction, true);
         this.device.queue.writeBuffer(this.buffers.interaction, 0, data);
     }
 
-    setInteraction(normX, normY, radius, strength, mode, active) {
+    setInteraction(normX, normY, radius, strength, mode, active, direction = 1.0) {
         this.interaction.posX = normX;
         this.interaction.posY = normY;
         this.interaction.radius = radius;
         this.interaction.strength = strength;
         this.interaction.mode = mode;
         this.interaction.active = active ? 1 : 0;
+        this.interaction.direction = direction;
     }
 
     step(substeps = 2) {
@@ -169,7 +171,7 @@ export class ShallowWaterSimulator {
             pass.setBindGroup(0, this.bindGroups.params);
             pass.setBindGroup(1, this.bindGroups.state);
 
-            if (this.interaction.active) {
+            if (s === 0 && this.interaction.active) {
                 pass.setPipeline(this.pipelines.apply_interaction);
                 pass.dispatchWorkgroups(wg, wg);
             }
@@ -209,17 +211,7 @@ export class ShallowWaterSimulator {
     }
 
     createSplash(normX, normY, strength = 1.0, radius = 0.05) {
-        this.setInteraction(normX, normY, radius, strength, 0, true);
-        this._updateInteractionBuffer();
-        const encoder = this.device.createCommandEncoder();
-        const pass = encoder.beginComputePass();
-        pass.setPipeline(this.pipelines.apply_interaction);
-        pass.setBindGroup(0, this.bindGroups.params);
-        pass.setBindGroup(1, this.bindGroups.state);
-        pass.dispatchWorkgroups(Math.ceil(this.gridSize / 16), Math.ceil(this.gridSize / 16));
-        pass.end();
-        this.device.queue.submit([encoder.finish()]);
-        this.interaction.active = 0;
+        this.setInteraction(normX, normY, radius, strength, 0, true, 1.0);
     }
 
     getBuffersForRender() {

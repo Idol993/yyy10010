@@ -23,8 +23,8 @@ struct InteractionParams {
     strength: f32,
     mode: u32,
     active: u32,
-    pad0: u32,
-    pad1: u32
+    direction: f32,
+    pad1: f32
 };
 
 @group(0) @binding(0) var<uniform> params: SimParams;
@@ -303,20 +303,27 @@ fn compute_height_and_normals(@builtin(global_invocation_id) gid: vec3<u32>) {
     
     height_buf[i] = water_h + terr;
     
-    let xl: u32 = max(x - 1u, 0u);
-    let xr: u32 = min(x + 1u, GRID_SIZE - 1u);
-    let yl: u32 = max(y - 1u, 0u);
-    let yu: u32 = min(y + 1u, GRID_SIZE - 1u);
+    let hc: f32 = height_buf[i];
     
-    let hxl: f32 = height_buf[y * GRID_SIZE + xl];
-    let hxr: f32 = height_buf[y * GRID_SIZE + xr];
-    let hyl: f32 = height_buf[yl * GRID_SIZE + x];
-    let hyu: f32 = height_buf[yu * GRID_SIZE + x];
+    var dhdx: f32;
+    if x == 0u {
+        dhdx = (height_buf[y * GRID_SIZE + 1u] - hc) * GRID_SIZE_F;
+    } else if x == GRID_SIZE - 1u {
+        dhdx = (hc - height_buf[y * GRID_SIZE + (GRID_SIZE - 2u)]) * GRID_SIZE_F;
+    } else {
+        dhdx = (height_buf[y * GRID_SIZE + (x + 1u)] - height_buf[y * GRID_SIZE + (x - 1u)]) * 0.5 * GRID_SIZE_F;
+    }
     
-    normal_buf[i] = vec2<f32>(
-        (hxr - hxl) * 0.5 * GRID_SIZE_F,
-        (hyu - hyl) * 0.5 * GRID_SIZE_F
-    );
+    var dhdy: f32;
+    if y == 0u {
+        dhdy = (height_buf[1u * GRID_SIZE + x] - hc) * GRID_SIZE_F;
+    } else if y == GRID_SIZE - 1u {
+        dhdy = (hc - height_buf[(GRID_SIZE - 2u) * GRID_SIZE + x]) * GRID_SIZE_F;
+    } else {
+        dhdy = (height_buf[(y + 1u) * GRID_SIZE + x] - height_buf[(y - 1u) * GRID_SIZE + x]) * 0.5 * GRID_SIZE_F;
+    }
+    
+    normal_buf[i] = vec2<f32>(dhdx, dhdy);
 }
 
 @compute @workgroup_size(16, 16)
@@ -349,12 +356,17 @@ fn apply_interaction(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
         case 1u: {
-            let new_terr: f32 = clamp(terrain_buf[i] + strength * 0.1, 0.0, params.h0 * 0.9);
+            let dir: f32 = interaction.direction;
+            let delta_terr: f32 = dir * strength * 0.1;
+            let new_terr: f32 = clamp(terrain_buf[i] + delta_terr, 0.0, params.h0 * 0.9);
             terrain_buf[i] = new_terr;
             h_buf[i] = max(params.h0 - new_terr, 0.01);
             if h_buf[i] < 0.02 {
                 hu_buf[i] = 0.0;
                 hv_buf[i] = 0.0;
+            } else {
+                hu_buf[i] -= delta_terr * 5.0;
+                hv_buf[i] -= delta_terr * 5.0;
             }
         }
         case 2u: {
